@@ -6,93 +6,112 @@ from scipy.ndimage.filters import gaussian_laplace
 from skimage import filters
 from skimage.measure import regionprops,label
 
+def threshold_runnable(image,filters = filters):
+	threshold = filters.threshold_otsu(image)
+	return threshold
 
-class shapeFilter(CellData):
-	def __init__(self, directory):
-	"""
-	directory should contain background subtracted MIPs from ch01 and ch02
-	"""
-
-		CellData.__init__(self,directory)
+class shapeFilter(object):
+	def __init__(self, directory,cellData = None):
+		"""
+		directory should contain background subtracted MIPs from ch01 and ch02
+		"""
+		self.directory = directory
+		if cellData is None:
+			self.cellData = CellData(self.directory,setupPool = False)
+			self.cellData.loadImages()
+		else:
+			self.cellData = cellData
 		
-		self.loadImages()
+		
 
 
-	def runShapeFilter(self):
-		openRedMIP = self.openImage_runnable(self.stack_channel_images[self.channels[1]][0])
+	def initialShapeFilter(self):
+		openRedMIP = self.openImage_runnable(self.cellData.stack_channel_images[self.cellData.channels[1]][0])
 		 #runs an opening to amplify separation between cells
 
-		gaussianredmip = self.gausLap_runnable(openRedMIP) 
+		gaussianredmip = shapeFilter.gausLap_runnable(openRedMIP) 
 		#gaussian smoothing for binary mask
 
 
-		binary_gaussian_red = self.getBinary_runnable(gaussianredmip,use_percentile=True,percentile = 0.5) 
+		binary_gaussian_red = shapeFilter.getBinary_runnable(gaussianredmip,use_percentile=True,percentile = 0.5)
+		self.cellData.saveImages(binary_gaussian_red.astype(numpy.uint16),self.cellData.basedir,'Labeled_Binary_Red','binary_mip')
 		#creates binary mask using otsu
 
-		binary_gaussian_red = self.areaFilter_runnable(binary_gaussian_red).astype(numpy.uint8)
+		binary_gaussian_red = shapeFilter.labelBinaryImage_runnable(binary_gaussian_red)
+		self.cellData.saveImages(binary_gaussian_red.astype(numpy.uint16),self.cellData.basedir,'Labeled_Binary_Red','initial_labeling')
+
+		binary_gaussian_red = shapeFilter.areaFilter_runnable(binary_gaussian_red)
+		self.cellData.saveImages(binary_gaussian_red.astype(numpy.uint16),self.cellData.basedir,'Labeled_Binary_Red','binary_opened_mip')
 		#removes small objects from binary mask
 
-        Image_properties, binary_gaussian_red = self.getImageCoordinates_runnable(binary_gaussian_red)
-        # gets properties of labeled binary objects
+		Image_properties, binary_gaussian_red = shapeFilter.getImageCoordinates_runnable(binary_gaussian_red)
+		# gets properties of labeled binary objects
 
-        for i in range(len(Image_properties)):
-        	props = Image_properties[i]
-            self.labeled_properties[i] = {'bbox': props.bbox,
-                     'area': props.filled_area,
-                     'y' : int(props.centroid[1]),
-                      'x' : int(props.centroid[0]),
-                     'diameter': int(props.equivalent_diameter),
-                     'label' : props.label}
+		for i in range(len(Image_properties)):
+			props = Image_properties[i]
+			self.cellData.labeled_properties[i] = {
+			'bbox': list(props.bbox),
+			'area': int(props.filled_area),
+			'y' : int(props.centroid[1]),
+			'x' : int(props.centroid[0]),
+			'diameter': int(props.equivalent_diameter),
+			'label' : int(props.label)}
 
-        self.processed_stack_images[self.channels[1]]['Labeled Binary Red'] = binary_gaussian_red
+		self.cellData.processed_stack_images[self.cellData.channels[1]]['Labeled Binary Red'] = binary_gaussian_red
+		self.cellData.saveImages(binary_gaussian_red.astype(numpy.uint16),self.cellData.basedir,
+			'Labeled_Binary_Red','binary_mip_labeled')
+		self.saveMetaData(foldername='Labeled_Binary_Red')
 
-
-        # self.saveMetaData('Labeled_binary_red')
-
-        # saveImages(binary_gaussian_red,self.directory,'Labeled_binary_red','red_binary_mip')
-
-
-
-    def areaFilter_runnable(image,objectFilter = remove_small_objects,default_size = 20):
+	@classmethod
+	def areaFilter_runnable(cls,image,objectFilter = remove_small_objects,default_size = 20):
 		return objectFilter(image,default_size)
 
+	@classmethod
+	def getBinary_runnable(cls,image,threshold = threshold_runnable,use_percentile = True,percentile = 0.7,np=numpy):
+		img_threshold = threshold_runnable(image)
+		if use_percentile:
+			return np.asarray((image > percentile * img_threshold),dtype = np.int)
+		else:
+			return np.asarray((image > img_threshold),dtype=np.int)
 
-	def getBinary_runnable(self,image,threshold = threshold_runnable,use_percentile = True,percentile = 0.7,np=numpy):
-	    img_threshold = self.threshold_runnable(image)
-	    if use_percentile:
-	        return np.asarray((image > percentile * img_threshold),dtype = np.int)
-	    else:
-	        return np.asarray((image > img_threshold),dtype=np.int)
-
-	def gausLap_runnable(self,image,sigma = 3,gaussianLap = gaussian_laplace):
+	@classmethod
+	def gausLap_runnable(cls,image,sigma = 3,gaussianLap = gaussian_laplace):
 		return gaussianLap(image,sigma)
 
-	def labelBinaryImage_runnable(self,image,label = label,neighbors = 8, connectivity = 5):
-	    return label(image,neighbors,connectivity)
+	@classmethod
+	def labelBinaryImage_runnable(cls,image,label = label,neighbors = 8):
+		return label(image,neighbors = neighbors)
 
-	def getImageCoordinates_runnable(self,image,intensity_image = None,regionprops=regionprops):
-	    labeledimg = self.labelBinaryImage_runnable(image)
-	    if intensity_image is not None:
-	        props = regionprops(labeledimg,intensity_image=intensity_image)
-	    else:
-	        props = regionprops(labeledimg)
-	    return props, labeledimg
+	@classmethod
+	def getImageCoordinates_runnable(cls,image,intensity_image = None,regionprops=regionprops):
+		labeledimg = shapeFilter.labelBinaryImage_runnable(image)
+		if intensity_image is not None:
+			props = regionprops(labeledimg,intensity_image=intensity_image)
+		else:
+			props = regionprops(labeledimg)
+		return props, labeledimg
 
 
 	def openImage_runnable(self,image,opening = opening, selem = square(1)):
 		return opening(image,selem)
 
-	def threshold_runnable(self,image,filters = filters):
-	    threshold = filters.threshold_otsu(image)
-	    return threshold
+	def unloadImages(self):
+		if self.cellData is not None:
+			self.cellData.unloadImages()
+
+	def removeObjectsByLabel_runnable(self,labeled_image_cutout,image_properties):
+		objectlabel = image_properties['label']
+		clean_image = labeled_image_cutout*(labeled_image_cutout == label).astype(int)
+		return clean_image
 
 	def saveMetaData(self,foldername):
-		if len(self.labeled_properties) != 0:
-			filepath = os.path.join(self.stackdir,foldername, 'measured_properties.json')
-			if not(os.path.exists(filepath)):
-				os.mkdir(filepath)
+		if len(self.cellData.labeled_properties) != 0:
+			filepath = os.path.join(self.cellData.basedir,foldername,'measured_properties.json') 
+
+			if not os.path.exists(os.path.join(self.cellData.basedir,foldername)):
+				os.mkdir(os.path.join(self.cellData.basedir,foldername))
 			with open(filepath,'w') as f:
-				json.dump(self.labeled_properties,f)
+				json.dump(self.cellData.labeled_properties,f)
 
 
 
