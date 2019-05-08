@@ -10,6 +10,12 @@ import tifffile
 from PyQt5.QtWidgets import QApplication, QWidget, QInputDialog, QLineEdit, QFileDialog, QMessageBox
 import PyQt5.QtGui as QtGui
 from PyQt5.QtCore import *
+from dicttoxml import dicttoxml,parseString,convert_dict
+import xmltodict
+
+
+basicxml = [os.path.join(os.getcwd(),f) for f in os.listdir(os.getcwd()) if 'basicxml' in f]
+
 
 class Executor(QWidget):
 	def __init__(self,basedir=None,stack_folder='Stack'):
@@ -30,7 +36,14 @@ class Executor(QWidget):
 
 		self.cellData = None
 
+		self.cell_count_list = None
+
+
 		self.initializeCellData(setupPool=True)
+		print(os.getcwd())
+
+		with open(basicxml[0],'r') as f:
+			self.saveStructure = xmltodict.parse(f.read())
 
 
 	def initializeCellData(self,setupPool,directory = None):
@@ -72,6 +85,36 @@ class Executor(QWidget):
 		goahead = self.background_directory_info['goahead']
 		if goahead:
 			self.shapeFilter.initialShapeFilter()
+			return True
+		else:
+			return False
+
+	def countCells(self):
+		stackCellData = self.getStackCellData()
+		stackCellData.loadImages()
+		self.cell_count_list = self.shapeFilter.countCells(stackCellData)
+
+	def getStackCellData(self):
+		stackdir = self.background_directory_info['Background Stack']
+		stackCellData = CellData(stackdir,setupPool=False)
+		return stackCellData
+
+	def saveCount(self):
+		self.saveStructure['CellCounter_Marker_File']["Marker_Data"]['Marker_Type'][0]["Marker"] = self.cell_count_list
+		self.saveStructure['CellCounter_Marker_File']["Image_Properties"]["Image_Filename"] = os.path.basename(self.basedir) + ".tif"
+
+		savefile = os.path.join(self.basedir,os.path.basename(self.basedir) + "_cellCount.xml")
+
+		thestring = xmltodict.unparse(self.saveStructure,pretty=True)
+		print(savefile)
+		print(type(thestring))
+
+		with open(savefile,'w') as f:
+			f.write(thestring)
+
+
+
+
 
 	def quit(self):
 		print('quitting')
@@ -97,8 +140,9 @@ if __name__ == '__main__':
 			if 'Background' in item:
 				if 'MIP' in item:
 					Ex.background_directory_info['Background MIP'] = os.path.join(Ex.basedir,item)
-				if 'Stack' in item:
+				if 'Images' in item:
 					Ex.background_directory_info['Background Stack'] = os.path.join(Ex.basedir,item)
+					print(Ex.background_directory_info)
 
 
 
@@ -128,7 +172,24 @@ if __name__ == '__main__':
 
 	else:
 		print('Finding Red Cells')
-		Ex.loadshapeFilter()
+		initial_process = Ex.loadshapeFilter()
+
+		if initial_process:
+
+			messagebox = QMessageBox()
+			messagebox.setText('Red Cells Detected. Would you like to execute counting method?')
+			messagebox.setStandardButtons(QMessageBox.Yes|QMessageBox.No)
+
+			ret = messagebox.exec_()
+
+			if ret == QMessageBox.Yes:
+				Ex.countCells()
+				Ex.saveCount()
+
+			if ret == QMessageBox.No:
+				print('Exiting')
+
+	print('Exiting')
 
 
 	sys.exit()
