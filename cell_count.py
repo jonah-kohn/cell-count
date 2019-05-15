@@ -87,10 +87,6 @@ class CellData(object):
 		self.processed_stack_images = None
 
 		self.initializeProperties()
-		
-		# for ch in self.channels:
-		#	 self.stack_channel_files[ch] = sorted([imgfile for imgfile in self.stackfilenames if ch in imgfile])
-			# print('channel filenames: ',self.stack_channel_files[ch])
 
 
 	def initializeProperties(self):
@@ -106,7 +102,6 @@ class CellData(object):
 			self.processed_stack_images = {'ch02': {},'ch01':{}}
 
 
-
 	def initializeProcessingPool(self,ncpus = 4):
 		self.pool = ProcessingPool(ncpus=ncpus)
 		
@@ -120,9 +115,9 @@ class CellData(object):
 		self.directory = None
 		self.stackfilenames = None
 
+
 	def unloadPool(self):
 		self.pool = None
-
 
 			
 	def loadImages(self):
@@ -137,9 +132,9 @@ class CellData(object):
 		
 		for ch in self.channels:
 			stack_imglist = self.stack_channel_files[ch]
-			# print(stack_imglist)
+
 			self.stack_channel_images[ch] = numpy.asarray(self.pool.map(readimg,stack_imglist),dtype = numpy.uint8)
-			# print(self.stack_channel_images[ch].shape)
+
 			if len(self.stack_channel_images[ch].shape) == 3:
 				z,y,x = self.stack_channel_images[ch].shape
 				if numpy.abs(x-y) != 0:

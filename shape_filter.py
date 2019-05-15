@@ -3,7 +3,7 @@ import os,json
 import numpy
 from skimage.morphology import watershed, disk, square, remove_small_objects,opening
 from scipy.ndimage.filters import gaussian_laplace
-from skimage import filters
+from skimage.filters import gaussian,laplace
 from skimage.measure import regionprops,label
 import scipy.ndimage as ndi
 from collections import OrderedDict
@@ -31,22 +31,29 @@ class shapeFilter(object):
 
 
 	def initialShapeFilter(self):
-		openRedMIP = self.openImage_runnable(self.cellData.stack_channel_images[self.cellData.channels[1]][0])
+		# openRedMIP = self.openImage_runnable(self.cellData.stack_channel_images[self.cellData.channels[1]][0])
 		 #runs an opening to amplify separation between cells
 
-		gaussianredmip = shapeFilter.gausLap_runnable(openRedMIP) 
+		gaussianredmip = gaussian(self.cellData.stack_channel_images[self.cellData.channels[1][0]],sigma = 7)
+		gaussianredmip = laplace(gaussianredmip)
 		#gaussian smoothing for binary mask
 
 
 		binary_gaussian_red = shapeFilter.getBinary_runnable(gaussianredmip,use_percentile=True,percentile = 0.5)
-		self.cellData.saveImages(binary_gaussian_red.astype(numpy.uint16),self.cellData.basedir,'Labeled_Binary_Red','binary_mip')
+
+		self.cellData.saveImages(binary_gaussian_red.astype(numpy.uint16),self.cellData.basedir,
+															'Labeled_Binary_Red','binary_mip')
 		#creates binary mask using otsu
 
 		binary_gaussian_red = shapeFilter.labelBinaryImage_runnable(binary_gaussian_red)
-		self.cellData.saveImages(binary_gaussian_red.astype(numpy.uint16),self.cellData.basedir,'Labeled_Binary_Red','initial_labeling')
+
+		self.cellData.saveImages(binary_gaussian_red.astype(numpy.uint16),self.cellData.basedir,
+														'Labeled_Binary_Red','initial_labeling')
 
 		binary_gaussian_red = shapeFilter.areaFilter_runnable(binary_gaussian_red)
-		self.cellData.saveImages(binary_gaussian_red.astype(numpy.uint16),self.cellData.basedir,'Labeled_Binary_Red','binary_opened_mip')
+
+		self.cellData.saveImages(binary_gaussian_red.astype(numpy.uint16),self.cellData.basedir,
+														'Labeled_Binary_Red','binary_opened_mip')
 		#removes small objects from binary mask
 
 		Image_properties, binary_gaussian_red = shapeFilter.getImageCoordinates_runnable(binary_gaussian_red)
@@ -233,7 +240,8 @@ class shapeFilter(object):
 		return objectFilter(image,default_size)
 
 	@classmethod
-	def getBinary_runnable(cls,image,threshold = threshold_runnable,use_percentile = True,percentile = 0.7,np=numpy):
+	def getBinary_runnable(cls,image,threshold = threshold_runnable,use_percentile = True,
+							percentile = 0.7,np=numpy):
 		img_threshold = threshold_runnable(image)
 		if use_percentile:
 			return np.asarray((image > percentile * img_threshold),dtype = np.int)
