@@ -3,7 +3,7 @@ import os,json
 import numpy
 from skimage.morphology import watershed, disk, square, remove_small_objects,opening
 from scipy.ndimage.filters import gaussian_laplace
-from skimage.filters import gaussian,laplace
+from skimage.filters import gaussian,laplace, threshold_otsu
 from skimage.measure import regionprops,label
 import scipy.ndimage as ndi
 from collections import OrderedDict
@@ -11,9 +11,9 @@ from dicttoxml import dicttoxml
 import xmltodict
 from skimage.feature import peak_local_max
 
-def threshold_runnable(image,filters = filters):
-	threshold = filters.threshold_otsu(image)
-	return threshold
+def threshold_runnable(image,threshold = threshold_otsu):
+	thresh = threshold(image)
+	return thresh
 
 class shapeFilter(object):
 	def __init__(self, directory,cellData = None):
@@ -34,7 +34,7 @@ class shapeFilter(object):
 		# openRedMIP = self.openImage_runnable(self.cellData.stack_channel_images[self.cellData.channels[1]][0])
 		 #runs an opening to amplify separation between cells
 
-		gaussianredmip = gaussian(self.cellData.stack_channel_images[self.cellData.channels[1][0]],sigma = 7)
+		gaussianredmip = gaussian(self.cellData.stack_channel_images[self.cellData.channels[1]][0],sigma = 7)
 		gaussianredmip = laplace(gaussianredmip)
 		#gaussian smoothing for binary mask
 
@@ -78,12 +78,12 @@ class shapeFilter(object):
 	def countCells(self,stackCellData):
 		image_properties = self.cellData.labeled_properties
 		binary_gaussian_red = self.cellData.processed_stack_images[self.cellData.channels[1]]['Labeled Binary Red']
-		print('max binary gaussian red',numpy.amax(binary_gaussian_red))
+
 
 		cell_count_list = []
 
 		for key in sorted(image_properties.keys()):
-		# for key in range(20):
+
 			item = image_properties[key]
 			print(key,item['label'])
 			x,y = item['x'],item['y']
@@ -94,17 +94,19 @@ class shapeFilter(object):
 
 			y1,y2 = item['bbox'][1],item['bbox'][3]
 
-			cutoutsize = int(4*item['diameter'])
+			cutoutsize = int(2*item['diameter'])
+			
 			objectarea = int(item['area'])
 
 			binary_cutout_image = self.cutImageByBoundary(binary_gaussian_red,xstart=x1,xstop=x2,ystart=y1,ystop=y2)
 
 			binredcut = shapeFilter.getImageCutouts_runnable(binary_cutout_image,x,y,cutout=cutoutsize)
-			# if numpy.amax(binredcut)==0:
-			# 	return
+
+
 
 
 			binredcut = self.removeObjectsByLabel_runnable(binredcut,item)
+			print(binredcut.shape)
 
 			fieldStacks = self.getCutoutFieldStacks_runnable(stackCellData,item)
 
@@ -115,97 +117,103 @@ class shapeFilter(object):
 			greenbin = fieldStacks['green_bin']
 			redbin = fieldStacks['red_bin']
 
+			print(greenbin.shape,redbin.shape)
+
 			fieldStacks = None
 			finalfield = []
 			
 			for i in range(len(smallredstack)):
 
 
-				if redhist[i] > numpy.percentile(redhist,70):
+				if redhist[i] > numpy.percentile(redhist,20):
 
 
 					smallbingreen = greenbin[i]
+
 					smallbinred = redbin[i]
 
 
 					labeledGreen1 = shapeFilter.labelBinaryImage_runnable(smallbingreen)
 					labeledGreen1 = remove_small_objects(labeledGreen1,5)
+
 					themax = numpy.amax(labeledGreen1)
 
-					if themax == 1: 
-						pass
+					# if themax == 1: 
+					# 	pass
 
-					else:
-						labeledRed = shapeFilter.labelBinaryImage_runnable(smallbinred)
-						fieldsize = labeledGreen1.shape[0]*labeledGreen1.shape[1]
-						strucsize = int(0.25*fieldsize)
+					# else:
+					labeledRed = shapeFilter.labelBinaryImage_runnable(smallbinred)
+					fieldsize = labeledGreen1.shape[0]*labeledGreen1.shape[1]
+					strucsize = int(0.25*fieldsize)
 
-						trial = ndi.distance_transform_edt(smallbingreen)
-						local_max =  peak_local_max(trial,indices = False,labels = labeledGreen1,min_distance=3)
+					trial = ndi.distance_transform_edt(smallbingreen)
+					local_max =  peak_local_max(trial,indices = False,labels = labeledGreen1,min_distance=3)
 
-						markers = ndi.label(local_max)[0]
+					markers = ndi.label(local_max)[0]
 
-						watershedGreen = watershed(-trial,markers,mask = labeledGreen1, watershed_line=True)
+					watershedGreen = watershed(-trial,markers,mask = labeledGreen1, watershed_line=True)
 
-						labeledGreen = label(watershedGreen,8)
+					labeledGreen = label(watershedGreen,8)
 
-						greenfieldProps,labeledGreen = shapeFilter.getImageCoordinates_runnable(labeledGreen)
+					greenfieldProps,labeledGreen = shapeFilter.getImageCoordinates_runnable(labeledGreen)
 
 
 
-						gareas = []
-						subimg = numpy.zeros(labeledGreen.shape)
-						for gprop in greenfieldProps:
-							props = {}
-							props['area'] = gprop.filled_area
-							props['label'] = gprop.label
-							gareas.append(props)
+					gareas = []
+					subimg = numpy.zeros(labeledGreen.shape)
+					for gprop in greenfieldProps:
+						props = {}
+						props['area'] = gprop.filled_area
+						props['label'] = gprop.label
+						gareas.append(props)
 
-						for area in gareas:
-							if area['area'] < strucsize:
+					for area in gareas:
+						if area['area'] < strucsize:
 
-								subimg = numpy.zeros(labeledGreen.shape)
-								pass
-							else:
+							subimg = numpy.zeros(labeledGreen.shape)
+							pass
+						else:
 
-								subimg = area['label']*(labeledGreen == area['label'])
-								labeledGreen = labeledGreen - subimg
-						# print('max green',numpy.amax(labeledGreen))
+							subimg = area['label']*(labeledGreen == area['label'])
+							labeledGreen = labeledGreen - subimg
+					# print('max green',numpy.amax(labeledGreen))
 
-						redfieldProps = shapeFilter.getImageCoordinates_runnable(labeledRed)
-						subimg = numpy.zeros(labeledRed.shape)
-						rareas = []
-						for rprop in redfieldProps[0]:
-							props = {}
-							props['area'] = rprop.filled_area
-							props['label'] = rprop.label
-							rareas.append(props)
+					redfieldProps = shapeFilter.getImageCoordinates_runnable(labeledRed)
+					subimg = numpy.zeros(labeledRed.shape)
+					rareas = []
+					for rprop in redfieldProps[0]:
+						props = {}
+						props['area'] = rprop.filled_area
+						props['label'] = rprop.label
+						rareas.append(props)
 
-						for area in rareas:
-							if area['area'] < strucsize:
+					for area in rareas:
+						if area['area'] < strucsize:
 
-								subimg = numpy.zeros(labeledGreen.shape)
-								pass
-							else:
+							subimg = numpy.zeros(labeledGreen.shape)
+							pass
+						else:
 
-								subimg = area['label']*(labeledRed == area['label'])
-								labeledRed = labeledRed - subimg
+							subimg = area['label']*(labeledRed == area['label'])
+							labeledRed = labeledRed - subimg
 
-						labeledRed = label(remove_small_objects(labeledRed,10),4)
-						# print('max labeled red',numpy.amax(labeledRed))
+					labeledRed = label(remove_small_objects(labeledRed,5),4)
+					# print('max labeled red',numpy.amax(labeledRed))
 
-						product = label(binredcut*labeledGreen,neighbors = 8,connectivity = 2)
-						# print('max of product',numpy.amax(product))
+					# print('binred shape', binredcut.shape,'\n','label green shape',labeledGreen.shape)
 
-						final_product = labeledRed*product
-						final_product = remove_small_objects(label(final_product),10)
+					product = label(labeledRed*labeledGreen,neighbors = 8,connectivity = 2)
+					# print('max of product',numpy.amax(product))
 
-						labeledproductprops,labeled_final_product = shapeFilter.getImageCoordinates_runnable(final_product)
-						# print("Detection Number:",len(labeledproductprops))
+					final_product = binredcut*product
+					final_product = remove_small_objects(label(final_product),5)
 
-						if len(labeledproductprops) != 0:
-							# print('appending')
-							finalfield.append(final_product)
+					labeledproductprops,labeled_final_product = shapeFilter.getImageCoordinates_runnable(final_product)
+					# print("Detection Number:",len(labeledproductprops))
+
+					if len(labeledproductprops) != 0:
+						# print('appending')
+						finalfield.append(final_product)
 
 
 			# print(len(finalfield),key)
@@ -213,8 +221,8 @@ class shapeFilter(object):
 				print('cell found at:',key,item['label'])
 
 				cellDict = OrderedDict()
-				cellDict['MarkerX'] = item['x']
-				cellDict['MarkerY'] = item['y']
+				cellDict['MarkerX'] = item['y']
+				cellDict['MarkerY'] = item['x']
 				cellDict['MarkerZ'] = item['z']
 				cell_count_list.append(cellDict)
 				print("Count is: \t",len(cell_count_list))
@@ -241,7 +249,7 @@ class shapeFilter(object):
 
 	@classmethod
 	def getBinary_runnable(cls,image,threshold = threshold_runnable,use_percentile = True,
-							percentile = 0.7,np=numpy):
+							percentile = 0.4,np=numpy):
 		img_threshold = threshold_runnable(image)
 		if use_percentile:
 			return np.asarray((image > percentile * img_threshold),dtype = np.int)
@@ -270,14 +278,18 @@ class shapeFilter(object):
 		if x < cutout:
 			xstart = 0
 			xstop = cutout
+			# print('xstart',xstart,'xstop',xstop)
 		else:
 			xstart,xstop = x - int(cutout/2), x + int(cutout/2)
 		if y < cutout:
 			ystart = 0
 			ystop = cutout
+			# print('ystart',ystart,'ystop',ystop)
 		else:
 			ystart,ystop = y - int(cutout/2), y + int(cutout/2)
-		return img[xstart:xstop,ystart:ystop]
+		newimg = img[xstart:xstop,ystart:ystop]
+		# print('cutoutshape',newimg.shape)
+		return newimg
 
 
 	def getCutoutFieldStacks_runnable(self,cellDataObject,image_properties):
@@ -296,7 +308,8 @@ class shapeFilter(object):
 		greenbin = []
 		redbin = []
 
-		cutoutsize = int(4*image_properties['diameter'])
+		cutoutsize = int(2*image_properties['diameter'])
+		# print('Field cutoutsize',cutoutsize)
 
 		for r,g in zip(redstack,greenstack):
 

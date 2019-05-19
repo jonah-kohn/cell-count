@@ -132,6 +132,7 @@ class CellData(object):
 		
 		for ch in self.channels:
 			stack_imglist = self.stack_channel_files[ch]
+			# print(stack_imglist)
 
 			self.stack_channel_images[ch] = numpy.asarray(self.pool.map(readimg,stack_imglist),dtype = numpy.uint8)
 
@@ -140,6 +141,7 @@ class CellData(object):
 				if numpy.abs(x-y) != 0:
 					self.stack_channel_images[ch] = self.padImagestack_runnable(self.stack_channel_images[ch])
 			else:
+				print(self.stack_channel_images[ch].shape,ch,'\n',self.stack_channel_images[ch])
 				y,x = self.stack_channel_images[ch].shape
 				if numpy.abs(x-y) != 0:
 					self.stack_channel_images[ch] = self.padSingleImage_runnable(self.stack_channel_images[ch])
@@ -291,6 +293,7 @@ class initialProcessor(object):
 		subtracted_stackdirname = 'Background Subtracted Stack'
 		newMIP_dirname = 'Background Subtracted MIP'
 		directorydict = {}
+		dualMIP = []
 
 		for ch in self.cellData.channels:
 
@@ -302,10 +305,20 @@ class initialProcessor(object):
 
 			if saveMIPs:
 				newMIP = self.cellData.getMaxPro_runnable(imageStack)
+				dualMIP.append(newMIP)
 				self.processed_mipdir = self.cellData.saveImages(newMIP,self.cellData.basedir,newMIP_dirname,'%s_BGMIP'%(ch))
 				directorydict['Background MIP'] = self.processed_mipdir
 
+			dualmipdir = os.path.join(self.cellData.basedir,'Cell Count')
+			if not os.path.exists(dualmipdir):
+				os.mkdir(dualmipdir)
+
+			dualfile = os.path.join(dualmipdir,'DualLabeled_MIP.tif')
+
+			tifffile.imsave(dualfile,numpy.asarray(dualMIP))
+
 		directorydict['Background Stack'] = self.processed_dir
+		directorydict['Cell Count'] = dualmipdir
 		directorydict['goahead'] = True
 
 		self.clearAttributes()
