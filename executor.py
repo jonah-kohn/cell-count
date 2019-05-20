@@ -101,7 +101,7 @@ class Executor(QWidget):
 	def getStackCellData(sel,stackdir):
 		# stackdir = self.background_directory_info['Background Stack']
 		print(stackdir)
-		stackCellData = CellData(stackdir,setupPool=False)
+		stackCellData = CellData(directory=stackdir,setupPool=False)
 		return stackCellData
 
 	def saveCount(self):
@@ -139,6 +139,8 @@ if __name__ == '__main__':
 	if ret == QMessageBox.Yes:
 		sysgoahead = True
 		Ex.loadInitialProcessor(goahead = True)
+		mipDIR = Ex.background_directory_info['Background MIP']
+		stackDIR = Ex.background_directory_info['Background Stack']
 	if ret == QMessageBox.No:
 		for item in os.listdir(Ex.basedir):
 			print(item)
@@ -146,7 +148,7 @@ if __name__ == '__main__':
 				if 'MIP' in item:
 					Ex.background_directory_info['Background MIP'] = os.path.join(Ex.basedir,item)
 					print(Ex.background_directory_info['Background MIP'])
-				if 'Images' in item:
+				if 'Stack' in item:
 					Ex.background_directory_info['Background Stack'] = os.path.join(Ex.basedir,item)
 					print(Ex.background_directory_info)
 			else:
