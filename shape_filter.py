@@ -10,6 +10,7 @@ from collections import OrderedDict
 from dicttoxml import dicttoxml
 import xmltodict
 from skimage.feature import peak_local_max
+import trackpy
 
 def threshold_runnable(image,threshold = threshold_otsu):
 	thresh = threshold(image)
@@ -34,6 +35,8 @@ class shapeFilter(object):
 		# openRedMIP = self.openImage_runnable(self.cellData.stack_channel_images[self.cellData.channels[1]][0])
 		 #runs an opening to amplify separation between cells
 
+		
+		gaussianredmip = trackpy.bandpass(self.cellData.stack_channel_images[self.cellData.channels[1]][0],1,27)
 		gaussianredmip = gaussian(self.cellData.stack_channel_images[self.cellData.channels[1]][0],sigma = 7)
 		gaussianredmip = laplace(gaussianredmip)
 		#gaussian smoothing for binary mask
@@ -258,9 +261,9 @@ class shapeFilter(object):
 							percentile = 0.7,np=numpy):
 		img_threshold = threshold_runnable(image)
 		if use_percentile:
-			return np.asarray((image > percentile * img_threshold),dtype = np.int)
+			return numpy.asarray((image > percentile * img_threshold),dtype = numpy.int)
 		else:
-			return np.asarray((image > img_threshold),dtype=np.int)
+			return numpy.asarray((image > img_threshold),dtype=numpy.int)
 
 	@classmethod
 	def gausLap_runnable(cls,image,sigma = 3,gaussianLap = gaussian_laplace):
@@ -325,7 +328,7 @@ class shapeFilter(object):
 			try:
 				smallbinred = shapeFilter.getBinary_runnable(redcut,use_percentile = True,percentile = .7)
 			except ValueError:
-				smallbinred = np.zeros(redcut.shape)
+				smallbinred = numpy.zeros(redcut.shape)
 
 			greencut = shapeFilter.getImageCutouts_runnable(g,x,y,cutout=cutoutsize)
 			greencut = opening(greencut,selem = square(1))
