@@ -10,6 +10,7 @@ from collections import OrderedDict
 from dicttoxml import dicttoxml
 import xmltodict
 from skimage.feature import peak_local_max
+import trackpy
 
 def threshold_runnable(image,threshold = threshold_otsu):
 	thresh = threshold(image)
@@ -34,6 +35,8 @@ class shapeFilter(object):
 		# openRedMIP = self.openImage_runnable(self.cellData.stack_channel_images[self.cellData.channels[1]][0])
 		 #runs an opening to amplify separation between cells
 
+		
+		gaussianredmip = trackpy.bandpass(self.cellData.stack_channel_images[self.cellData.channels[1]][0],1,27)
 		gaussianredmip = gaussian(self.cellData.stack_channel_images[self.cellData.channels[1]][0],sigma = 7)
 		gaussianredmip = laplace(gaussianredmip)
 		#gaussian smoothing for binary mask
@@ -61,13 +64,16 @@ class shapeFilter(object):
 
 		for i in range(len(Image_properties)):
 			props = Image_properties[i]
-			self.cellData.labeled_properties[i] = {
-			'bbox': list(props.bbox),
-			'area': int(props.filled_area),
-			'y' : int(props.centroid[1]),
-			'x' : int(props.centroid[0]),
-			'diameter': int(props.equivalent_diameter),
-			'label' : int(props.label)}
+			if int(props.equivalent_diameter) > 40: 
+				pass
+			else:
+				self.cellData.labeled_properties[i] = {
+				'bbox': list(props.bbox),
+				'area': int(props.filled_area),
+				'y' : int(props.centroid[1]),
+				'x' : int(props.centroid[0]),
+				'diameter': int(props.equivalent_diameter),
+				'label' : int(props.label)}
 
 		self.cellData.processed_stack_images[self.cellData.channels[1]]['Labeled Binary Red'] = binary_gaussian_red
 		self.cellData.saveImages(binary_gaussian_red.astype(numpy.uint16),self.cellData.basedir,
@@ -94,7 +100,7 @@ class shapeFilter(object):
 
 			y1,y2 = item['bbox'][1],item['bbox'][3]
 
-			cutoutsize = int(2*item['diameter'])
+			cutoutsize = int(4*item['diameter'])
 			
 			objectarea = int(item['area'])
 
@@ -122,7 +128,7 @@ class shapeFilter(object):
 			fieldStacks = None
 			finalfield = []
 			
-			for i in range(len(smallredstack)):
+			for i in range(1,len(smallredstack)):
 
 
 				if redhist[i] > numpy.percentile(redhist,20):
@@ -205,8 +211,11 @@ class shapeFilter(object):
 					product = label(labeledRed*labeledGreen,neighbors = 8,connectivity = 2)
 					# print('max of product',numpy.amax(product))
 
-					final_product = binredcut*product
-					final_product = remove_small_objects(label(final_product),5)
+					try:
+						final_product = binredcut*product
+						final_product = remove_small_objects(label(final_product),5)
+					except ValueError:
+						final_product = remove_small_objects(product,5)
 
 					labeledproductprops,labeled_final_product = shapeFilter.getImageCoordinates_runnable(final_product)
 					# print("Detection Number:",len(labeledproductprops))
@@ -249,12 +258,12 @@ class shapeFilter(object):
 
 	@classmethod
 	def getBinary_runnable(cls,image,threshold = threshold_runnable,use_percentile = True,
-							percentile = 0.4,np=numpy):
+							percentile = 0.7,np=numpy):
 		img_threshold = threshold_runnable(image)
 		if use_percentile:
-			return np.asarray((image > percentile * img_threshold),dtype = np.int)
+			return numpy.asarray((image > percentile * img_threshold),dtype = numpy.int)
 		else:
-			return np.asarray((image > img_threshold),dtype=np.int)
+			return numpy.asarray((image > img_threshold),dtype=numpy.int)
 
 	@classmethod
 	def gausLap_runnable(cls,image,sigma = 3,gaussianLap = gaussian_laplace):
@@ -308,7 +317,7 @@ class shapeFilter(object):
 		greenbin = []
 		redbin = []
 
-		cutoutsize = int(2*image_properties['diameter'])
+		cutoutsize = int(4*image_properties['diameter'])
 		# print('Field cutoutsize',cutoutsize)
 
 		for r,g in zip(redstack,greenstack):
@@ -316,12 +325,18 @@ class shapeFilter(object):
 			redcut = shapeFilter.getImageCutouts_runnable(r,x,y,cutout=cutoutsize)
 			redhist.append(numpy.std(redcut))
 			redcut = opening(redcut,selem = square(1))
-			smallbinred = shapeFilter.getBinary_runnable(redcut,use_percentile = True,percentile = .5)
+			try:
+				smallbinred = shapeFilter.getBinary_runnable(redcut,use_percentile = True,percentile = .7)
+			except ValueError:
+				smallbinred = numpy.zeros(redcut.shape)
 
 			greencut = shapeFilter.getImageCutouts_runnable(g,x,y,cutout=cutoutsize)
 			greencut = opening(greencut,selem = square(1))
 
-			smallbingreen = shapeFilter.getBinary_runnable(greencut,use_percentile=True,percentile = .3)
+			try:
+				smallbingreen = shapeFilter.getBinary_runnable(greencut,use_percentile=True,percentile = .7)
+			except ValueError:
+				smallbingreen = numpy.zeros(greencut.shape)
 
 			smallredstack.append(redcut)
 			redbin.append(smallbinred)

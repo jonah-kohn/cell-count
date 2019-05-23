@@ -101,14 +101,29 @@ class Executor(QWidget):
 	def getStackCellData(sel,stackdir):
 		# stackdir = self.background_directory_info['Background Stack']
 		print(stackdir)
-		stackCellData = CellData(stackdir,setupPool=False)
+		stackCellData = CellData(directory=stackdir,setupPool=False)
 		return stackCellData
 
 	def saveCount(self):
 		self.saveStructure['CellCounter_Marker_File']["Marker_Data"]['Marker_Type'][0]["Marker"] = self.cell_count_list
 		self.saveStructure['CellCounter_Marker_File']["Image_Properties"]["Image_Filename"] = "DualLabeled_MIP.tif"
 
-		savefile = os.path.join(self.background_directory_info["Cell Count"],"ch01ch02_cellCount.xml")
+		mippath = self.background_directory_info["Original MIP"]
+
+		savefile = os.path.join(mippath,"ch01ch02_cellCount.xml")
+
+		saveMIP = os.path.join(mippath,"DualLabeled_MIP.tif")
+
+		tifffiles = sorted([os.path.join(mippath,f) for f in os.listdir(mippath) if (f.endswith('tif') and ('ch00' not in f))])
+
+		dualmip = []
+		for f in tifffiles:
+			dualmip.append(tifffile.imread(f))
+
+		dualmip = numpy.asarray(dualmip)
+
+		tifffile.imsave(saveMIP,dualmip)
+
 
 		thestring = xmltodict.unparse(self.saveStructure,pretty=True)
 		print(savefile)
@@ -139,6 +154,8 @@ if __name__ == '__main__':
 	if ret == QMessageBox.Yes:
 		sysgoahead = True
 		Ex.loadInitialProcessor(goahead = True)
+		mipDIR = Ex.background_directory_info['Background MIP']
+		stackDIR = Ex.background_directory_info['Background Stack']
 	if ret == QMessageBox.No:
 		for item in os.listdir(Ex.basedir):
 			print(item)
@@ -146,7 +163,7 @@ if __name__ == '__main__':
 				if 'MIP' in item:
 					Ex.background_directory_info['Background MIP'] = os.path.join(Ex.basedir,item)
 					print(Ex.background_directory_info['Background MIP'])
-				if 'Images' in item:
+				if 'Stack' in item:
 					Ex.background_directory_info['Background Stack'] = os.path.join(Ex.basedir,item)
 					print(Ex.background_directory_info)
 			else:
@@ -193,6 +210,8 @@ if __name__ == '__main__':
 		# 	sysgoahead = False
 
 		Ex.background_directory_info['goahead'] = sysgoahead
+
+	print(stackDIR)
 
 
 
