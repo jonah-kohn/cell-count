@@ -108,7 +108,7 @@ class Executor(QWidget):
 		self.saveStructure['CellCounter_Marker_File']["Marker_Data"]['Marker_Type'][0]["Marker"] = self.cell_count_list
 		self.saveStructure['CellCounter_Marker_File']["Image_Properties"]["Image_Filename"] = "DualLabeled_MIP.tif"
 
-		mippath = self.background_directory_info["Original MIP"]
+		mippath = self.background_directory_info["Cell Count"]
 
 		savefile = os.path.join(mippath,"ch01ch02_cellCount.xml")
 
